@@ -78,3 +78,42 @@ sigma_test = np.maximum(sigma_model.predict(y_pred_test.reshape(-1, 1)), 1e-6)
 final_predictions = y_pred_test[:, None] + sigma_test[:, None] * empirical_quantiles[None, :]
 
 print("Task C quantiles generated and ready for submission!")
+
+
+import pandas as pd
+import numpy as np
+
+# ==========================================
+# 5. KAGGLE EXPORT FORMATTING
+# ==========================================
+# IMPORTANT: CHANGE THIS VARIABLE TO 'B', 'C', or 'D' in the respective files!
+TASK = 'C' 
+
+print(f"Formatting final predictions for Task {TASK} export...")
+
+# Extract the correct predictions variable depending on the task
+preds = final_predictions if 'final_predictions' in locals() else predictions
+
+# Requirement 1: Sort the quantiles to ensure they are strictly non-decreasing
+preds_sorted = np.sort(preds, axis=1)
+
+# Requirement 2: Correct ID formatting (q10, q20 ... q90)
+q_labels = [10, 20, 30, 40, 50, 60, 70, 80, 90]
+ids = []
+values = []
+
+# Iterate through test rows and all 9 quantiles
+for i, row_id in enumerate(test_df['row_id']):
+    for j, q in enumerate(q_labels):
+        # Create the ID string exactly as requested (e.g., A_00000_q10)
+        ids.append(f"{row_id}_q{q}")
+        
+        # Requirement 3: Sanitize data (handle missing/inf values if they appear)
+        val = np.nan_to_num(preds_sorted[i, j], posinf=1e6, neginf=-1e6)
+        values.append(val)
+
+# Create the final single-task DataFrame and save to CSV
+df_out = pd.DataFrame({'id': ids, 'value': values})
+df_out.to_csv(f'sub_{TASK}.csv', index=False)
+
+print(f"Successfully saved formatted file: sub_{TASK}.csv!")
