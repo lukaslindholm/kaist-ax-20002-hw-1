@@ -55,6 +55,6 @@ for i, (task, file) in enumerate(zip(tasks, files)):
     axes[3, i].set_ylabel('Residual')
 
 plt.tight_layout()
-plt.savefig('diagnostics.pdf')
+plt.savefig('diagnostics.png')
 plt.show()
 print("Diagnostics finished!")

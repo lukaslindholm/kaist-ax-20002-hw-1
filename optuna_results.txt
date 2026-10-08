@@ -1,0 +1,17 @@
+Optuna Optimization Run: 2026-10-08 21:50:00.160271
+==================================================
+
+TASK A OPTIMIZATION FINISHED
+Best D2 Score (5-Fold CV): 0.6641
+Best Parameters: {'n_estimators': 1401, 'learning_rate': 0.09740860080850537, 'num_leaves': 36, 'min_child_samples': 70, 'subsample': 0.7065167715662066, 'colsample_bytree': 0.6228754457396789}
+--------------------------------------------------
+
+TASK B OPTIMIZATION FINISHED
+Best D2 Score (5-Fold CV): 0.7486
+Best Parameters: {'n_estimators': 1037, 'learning_rate': 0.06372453303557442, 'num_leaves': 53, 'min_child_samples': 28, 'subsample': 0.8013859992032829, 'colsample_bytree': 0.8498118549058302}
+--------------------------------------------------
+
+TASK C OPTIMIZATION FINISHED
+Best D2 Score (5-Fold CV): 0.8186
+Best Parameters: {'n_estimators': 1326, 'learning_rate': 0.08863157293414368, 'num_leaves': 52, 'min_child_samples': 14, 'subsample': 0.6737755391727794, 'colsample_bytree': 0.9322108757775183}
+--------------------------------------------------
