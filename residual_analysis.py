@@ -6,10 +6,10 @@ from scipy import stats
 import os
 
 tasks = ['A', 'B', 'C', 'D']
-# Updated file paths to look inside the 'data' folder
 files = ['data/train_A.csv', 'data/train_B.csv', 'data/train_C.csv', 'data/train_D.csv'] 
 
-fig, axes = plt.subplots(4, 4, figsize=(20, 20))
+# Skapa mappen 'plots' om den inte redan finns
+os.makedirs('plots', exist_ok=True)
 
 for i, (task, file) in enumerate(zip(tasks, files)):
     if not os.path.exists(file):
@@ -35,26 +35,35 @@ for i, (task, file) in enumerate(zip(tasks, files)):
     y_pred = X_design @ w
     residuals = y - y_pred
     
-    # Row 1: Target distribution
-    sns.histplot(y, kde=True, ax=axes[0, i])
-    axes[0, i].set_title(f'Task {task}: Target (y) Dist')
+    # Skapa en ny figur för varje task: 4 rader, 1 kolumn
+    fig, axes = plt.subplots(4, 1, figsize=(8, 16))
     
-    # Row 2: Residual distribution
-    sns.histplot(residuals, kde=True, ax=axes[1, i])
-    axes[1, i].set_title(f'Task {task}: Residuals Histogram')
+    # 1: Target distribution
+    sns.histplot(y, kde=True, ax=axes[0])
+    axes[0].set_title(f'Task {task}: Target (y) Dist')
     
-    # Row 3: QQ-plot
-    stats.probplot(residuals, dist="norm", plot=axes[2, i])
-    axes[2, i].set_title(f'Task {task}: QQ-Plot (Normality)')
+    # 2: Residual distribution
+    sns.histplot(residuals, kde=True, ax=axes[1])
+    axes[1].set_title(f'Task {task}: Residuals Histogram')
     
-    # Row 4: Residuals vs Predicted
-    axes[3, i].scatter(y_pred, residuals, alpha=0.3, s=5)
-    axes[3, i].axhline(0, color='red', linestyle='--')
-    axes[3, i].set_title(f'Task {task}: Residuals vs Pred')
-    axes[3, i].set_xlabel('Predicted y')
-    axes[3, i].set_ylabel('Residual')
+    # 3: QQ-plot
+    stats.probplot(residuals, dist="norm", plot=axes[2])
+    axes[2].set_title(f'Task {task}: QQ-Plot (Normality)')
+    
+    # 4: Residuals vs Predicted
+    axes[3].scatter(y_pred, residuals, alpha=0.3, s=5)
+    axes[3].axhline(0, color='red', linestyle='--')
+    axes[3].set_title(f'Task {task}: Residuals vs Pred')
+    axes[3].set_xlabel('Predicted y')
+    axes[3].set_ylabel('Residual')
 
-plt.tight_layout()
-plt.savefig('diagnostics.png')
-plt.show()
-print("Diagnostics finished!")
+    plt.tight_layout()
+    
+    # Spara som PDF i mappen 'plots'
+    save_path = f'plots/diagnostics_task_{task}.pdf'
+    plt.savefig(save_path)
+    plt.close() # Stänger figuren för att frigöra minne inför nästa loop
+    
+    print(f"Sparade diagnostik för Task {task} i {save_path}")
+
+print("Alla figurer är genererade!")

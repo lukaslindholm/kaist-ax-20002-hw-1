@@ -1,9 +1,11 @@
 import pandas as pd
 import numpy as np
 import lightgbm as lgb
+import xgboost as xgb
 from lightgbm import LGBMRegressor, LGBMClassifier
 from sklearn.linear_model import LinearRegression, LogisticRegression
 from sklearn.calibration import CalibratedClassifierCV
+from sklearn.cluster import KMeans
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -14,7 +16,7 @@ QUANTILES = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
 Q_LABELS = [10, 20, 30, 40, 50, 60, 70, 80, 90]
 TASKS = ['A', 'B', 'C', 'D']
 
-print("=== BUILDING KAGGLE SUBMISSION ===")
+print("=== BUILDING FINAL KAGGLE SUBMISSION ===")
 
 all_ids = []
 all_values = []
@@ -22,7 +24,6 @@ all_values = []
 for TASK in TASKS:
     print(f"--- Training Final Models for Task {TASK} ---")
     
-    # Ladda Data
     train = pd.read_csv(f'data/train_{TASK}.csv')
     test = pd.read_csv(f'data/test_{TASK}.csv')
     
@@ -30,31 +31,33 @@ for TASK in TASKS:
     row_ids = test['row_id'].values
     
     both = pd.concat([train.drop(columns='y'), test.drop(columns='row_id')], keys=["tr", "te"])
-    both_encoded = pd.get_dummies(both, drop_first=True, dtype=float)
     
     # ---------------------------------------------------------
-    # Feature Engineering (Före OLS)
+    # FEATURE ENGINEERING
     # ---------------------------------------------------------
     if TASK == 'A':
-        both_encoded['lat_lon_grid'] = np.round(both_encoded['x07']) * np.round(both_encoded['x08'])
-        both_encoded['x04_is_1'] = (np.abs(both_encoded['x04'] - 1.0) < 1e-4).astype(float)
-        both_encoded['x05_inv'] = 1.0 / (both_encoded['x05'] + 0.001)
+        coords = both[['x07', 'x08']]
+        kmeans = KMeans(n_clusters=50, random_state=42, n_init='auto')
+        dist_features = kmeans.fit_transform(coords)
+        dist_df = pd.DataFrame(dist_features, columns=[f'dist_c_{i}' for i in range(50)], index=both.index)
+        
+        both = pd.concat([both.drop(columns=['x07', 'x08']), dist_df], axis=1)
+        both['x04_is_1'] = (np.abs(both['x04'] - 1.0) < 1e-4).astype(float)
+        both['x05_inv'] = 1.0 / (both['x05'] + 0.001)
 
+    both_encoded = pd.get_dummies(both, drop_first=True, dtype=float)
     X_train = both_encoded.loc["tr"].to_numpy()
     X_test = both_encoded.loc["te"].to_numpy()
 
     # ---------------------------------------------------------
-    # Tasks A, B, C (OLS, LogReg, Optuna)
+    # TASKS A, B, C
     # ---------------------------------------------------------
     if TASK in ['A', 'B', 'C']:
-        
-        # 1. OLS Baseline meta-feature
         ols = LinearRegression()
         ols.fit(X_train, y_train)
         X_train_aug = np.hstack([X_train, ols.predict(X_train).reshape(-1, 1)])
         X_test_aug = np.hstack([X_test, ols.predict(X_test).reshape(-1, 1)])
         
-        # 2. Logistic Regression meta-feature (Endast Task B)
         if TASK == 'B':
             y_bin = (y_train > np.median(y_train)).astype(int)
             logreg = LogisticRegression(max_iter=1000, random_state=42)
@@ -62,28 +65,32 @@ for TASK in TASKS:
             X_train_aug = np.hstack([X_train_aug, logreg.predict_proba(X_train)[:, 1].reshape(-1, 1)])
             X_test_aug = np.hstack([X_test_aug, logreg.predict_proba(X_test)[:, 1].reshape(-1, 1)])
 
-        # 3. Optuna Hyperparameters
+        task_preds = np.zeros((X_test_aug.shape[0], len(QUANTILES)))
+        
         if TASK == 'A':
             params = {'n_estimators': 1401, 'learning_rate': 0.0974, 'num_leaves': 36, 'min_child_samples': 70, 'subsample': 0.7065, 'colsample_bytree': 0.6229}
+            for j, q in enumerate(QUANTILES):
+                model = LGBMRegressor(objective='quantile', alpha=q, random_state=42, verbose=-1, **params)
+                model.fit(X_train_aug, y_train)
+                task_preds[:, j] = model.predict(X_test_aug)
+            task_preds = np.clip(task_preds, a_min=None, a_max=5.0)
+            
         elif TASK == 'B':
-            params = {'n_estimators': 1037, 'learning_rate': 0.0637, 'num_leaves': 53, 'min_child_samples': 28, 'subsample': 0.8014, 'colsample_bytree': 0.8498}
+            params = {'objective': 'reg:quantileerror', 'n_estimators': 1096, 'learning_rate': 0.0941, 'max_depth': 4, 'min_child_weight': 5, 'subsample': 0.8622, 'colsample_bytree': 0.8361, 'reg_lambda': 0.5890, 'n_jobs': -1, 'random_state': 42}
+            for j, q in enumerate(QUANTILES):
+                model = xgb.XGBRegressor(quantile_alpha=q, **params)
+                model.fit(X_train_aug, y_train)
+                task_preds[:, j] = model.predict(X_test_aug)
+                
         elif TASK == 'C':
             params = {'n_estimators': 1326, 'learning_rate': 0.0886, 'num_leaves': 52, 'min_child_samples': 14, 'subsample': 0.6738, 'colsample_bytree': 0.9322}
-
-        # 4. Träna Kvantiler (100% data, ingen early stopping)
-        task_preds = np.zeros((X_test_aug.shape[0], len(QUANTILES)))
-        for j, q in enumerate(QUANTILES):
-            model = LGBMRegressor(
-                objective='quantile', alpha=q, random_state=42, verbose=-1, **params
-            )
-            model.fit(X_train_aug, y_train)
-            task_preds[:, j] = model.predict(X_test_aug)
-            
-        if TASK == 'A':
-            task_preds = np.clip(task_preds, a_min=None, a_max=5.0)
+            for j, q in enumerate(QUANTILES):
+                model = LGBMRegressor(objective='quantile', alpha=q, random_state=42, verbose=-1, **params)
+                model.fit(X_train_aug, y_train)
+                task_preds[:, j] = model.predict(X_test_aug)
 
     # ---------------------------------------------------------
-    # Task D (Mixture Model)
+    # TASK D (Optimized Mixture Model)
     # ---------------------------------------------------------
     elif TASK == 'D':
         THRESHOLD = 6.9
@@ -105,15 +112,11 @@ for TASK in TASKS:
         high_preds_dense = np.zeros((X_test.shape[0], len(DENSE_QUANTILES)))
         
         for j, q in enumerate(DENSE_QUANTILES):
-            model_low = LGBMRegressor(objective='quantile', alpha=q, n_estimators=700, 
-                                      num_leaves=31, learning_rate=0.03, random_state=42, verbose=-1)
+            model_low = LGBMRegressor(objective='quantile', alpha=q, n_estimators=861, num_leaves=61, learning_rate=0.08685, random_state=42, verbose=-1)
             model_low.fit(X_low, y_low)
             low_preds_dense[:, j] = model_low.predict(X_test)
             
-        for j, q in enumerate(DENSE_QUANTILES):
-            model_high = LGBMRegressor(objective='quantile', alpha=q, n_estimators=1200, 
-                                       num_leaves=127, learning_rate=0.02, min_child_samples=50, 
-                                       reg_lambda=3.0, reg_alpha=0.1, random_state=42, verbose=-1)
+            model_high = LGBMRegressor(objective='quantile', alpha=q, n_estimators=1144, num_leaves=220, learning_rate=0.01161, min_child_samples=50, random_state=42, verbose=-1)
             model_high.fit(X_high, y_high)
             high_preds_dense[:, j] = model_high.predict(X_test)
             
@@ -132,19 +135,15 @@ for TASK in TASKS:
         task_preds = np.clip(task_preds, a_min=0.0, a_max=21.0)
 
     # ---------------------------------------------------------
-    # Format and Save (Monotonicity Check)
+    # FORMAT & EXPORT
     # ---------------------------------------------------------
-    task_preds = np.sort(task_preds, axis=1) # Ensure non-decreasing quantiles
-    
+    task_preds = np.sort(task_preds, axis=1) 
     for i, r_id in enumerate(row_ids):
         for j, q_lab in enumerate(Q_LABELS):
             all_ids.append(f"{r_id}_q{q_lab}")
             all_values.append(task_preds[i, j])
 
 print("--- Generating submission_final.csv ---")
-df_out = pd.DataFrame({
-    'id': all_ids,
-    'value': all_values
-})
-df_out.to_csv("submission_final2.csv", index=False)
-print("Done! File ready for Kaggle.")
+df_out = pd.DataFrame({'id': all_ids, 'value': all_values})
+df_out.to_csv("submission_final.csv", index=False)
+print("Done! Klar för Kaggle.")

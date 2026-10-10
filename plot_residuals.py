@@ -52,5 +52,5 @@ for i, feature in enumerate(feature_names):
     plt.title(f'Residual vs {feature}')
 
 plt.tight_layout(rect=[0, 0.03, 1, 0.95])
-plt.savefig('residuals_vs_features.png')
+plt.savefig('residuals_vs_features.pdf')
 plt.show()

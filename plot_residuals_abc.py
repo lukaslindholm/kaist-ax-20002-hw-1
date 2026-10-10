@@ -1,65 +1,74 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from lightgbm import LGBMRegressor
-from sklearn.model_selection import train_test_split
-import warnings
-warnings.filterwarnings('ignore')
+import lightgbm as lgb
+import os
+import math
 
-TASKS = ['A', 'B', 'C']
+# AI Usage Declaration for KAIST AX20002:
+# Parts of this code were generated with AI assistance.
 
-for task in TASKS:
-    print(f"--- Skapar residual-diagnostik för Task {task} ---")
+os.makedirs('plots', exist_ok=True)
 
-    # Load data
-    train = pd.read_csv(f'data/train_{task}.csv')
-    y = train['y'].to_numpy(dtype=float)
-    X_df = pd.get_dummies(train.drop(columns='y'), drop_first=True)
-    feature_names = X_df.columns
-    X = X_df.to_numpy(dtype=float)
+file = 'data/train_A.csv'
+task = 'A'
 
-    X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42)
-
-    # Train a median model (q=0.5) to capture average error
-    model = LGBMRegressor(
-        objective='quantile',
-        alpha=0.5,
-        n_estimators=500,
-        num_leaves=31,
-        learning_rate=0.05,
-        random_state=42,
-        verbose=-1
-    )
-    model.fit(X_train, y_train)
-
-    val_preds = model.predict(X_val)
+if not os.path.exists(file):
+    print(f"Error: Could not find {file}")
+else:
+    df = pd.read_csv(file)
+    y = df['y'].values
+    X_raw = df.drop(columns=['y'])
     
-    # Clip constraints if known
-    if task == 'A':
-        val_preds = np.clip(val_preds, a_min=None, a_max=5.0)
+    # Encode categorical variables
+    X_encoded = pd.get_dummies(X_raw, drop_first=True, dtype=float)
+    X = X_encoded.values
+    
+    # Train a Baseline LightGBM for the median (q50)
+    model = lgb.LGBMRegressor(objective='quantile', alpha=0.5, random_state=42, verbose=-1)
+    model.fit(X, y)
+    
+    # Calculate residuals: Actual y - model's median prediction
+    y_pred_median = model.predict(X)
+    residuals = y - y_pred_median
+    
+    features = list(X_raw.columns)
+    n_features = len(features)
+    
+    # Split features into two equal halves
+    mid_point = math.ceil(n_features / 2)
+    feature_splits = [features[:mid_point], features[mid_point:]]
+    
+    for i, feature_subset in enumerate(feature_splits):
+        n_sub = len(feature_subset)
         
-    residuals = y_val - val_preds
+        cols = 2 
+        rows = math.ceil(n_sub / cols)
+        
+        fig, axes = plt.subplots(rows, cols, figsize=(10, 4 * rows))
+        axes = axes.flatten()
+        
+        for idx, feature in enumerate(feature_subset):
+            axes[idx].scatter(X_raw[feature], residuals, alpha=0.3, s=5, color='royalblue')
+            axes[idx].axhline(0, color='red', linestyle='--')
+            axes[idx].set_title(f'LGBM Median Residuals vs {feature}', fontsize=12)
+            axes[idx].set_xlabel(feature)
+            axes[idx].set_ylabel('Residual')
+            
+        # Hide any empty subplots in the grid
+        for idx in range(n_sub, len(axes)):
+            fig.delaxes(axes[idx])
+            
+        # Lägg BARA till huvudrubrik för del 1
+        if i == 0:
+            plt.suptitle(f'Task {task}: Baseline LGBM Residuals vs Features', fontsize=14, y=1.02)
+            
+        plt.tight_layout()
+        
+        save_path = f'plots/baseline_lgbm_residuals_task_{task}_part{i+1}.pdf'
+        plt.savefig(save_path, bbox_inches='tight')
+        plt.close()
+        
+        print(f"Saved Part {i+1} plot to {save_path}")
 
-    # --- PLOTTING ---
-    num_features = len(feature_names)
-    cols = 3
-    rows = (num_features + cols - 1) // cols
-
-    plt.figure(figsize=(15, 4 * rows))
-    plt.suptitle(f'Residualer vs Features för Task {task} (LGBM Median)', fontsize=16)
-
-    for i, feature in enumerate(feature_names):
-        plt.subplot(rows, cols, i + 1)
-        plt.scatter(X_val[:, i], residuals, alpha=0.3, color='blue', s=2)
-        plt.axhline(0, color='red', linestyle='--')
-        plt.xlabel(feature)
-        plt.ylabel('Residual (True - Predicted)')
-        plt.title(f'Residual vs {feature}')
-
-    plt.tight_layout(rect=[0, 0.03, 1, 0.95])
-    filename = f'residuals_vs_features_task_{task}.png'
-    plt.savefig(filename)
-    plt.close()
-    print(f"Sparade {filename}")
-
-print("Klart!")
+print("Task A split feature diagnostic plots generated successfully!")
