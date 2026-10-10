@@ -146,4 +146,4 @@ for TASK in TASKS:
 print("--- Generating submission_final.csv ---")
 df_out = pd.DataFrame({'id': all_ids, 'value': all_values})
 df_out.to_csv("submission_final.csv", index=False)
-print("Done! Klar för Kaggle.")
+print("Done! Ready for submission.")

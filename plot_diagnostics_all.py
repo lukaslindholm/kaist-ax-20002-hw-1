@@ -5,10 +5,13 @@ import seaborn as sns
 from scipy import stats
 import os
 
+# AI Usage Declaration for KAIST AX20002:
+# Parts of this code were generated with AI assistance.
+
 tasks = ['A', 'B', 'C', 'D']
 files = ['data/train_A.csv', 'data/train_B.csv', 'data/train_C.csv', 'data/train_D.csv'] 
 
-# Skapa mappen 'plots' om den inte redan finns
+# Create the 'plots' folder if it doesn't already exist
 os.makedirs('plots', exist_ok=True)
 
 for i, (task, file) in enumerate(zip(tasks, files)):
@@ -35,7 +38,7 @@ for i, (task, file) in enumerate(zip(tasks, files)):
     y_pred = X_design @ w
     residuals = y - y_pred
     
-    # Skapa en ny figur för varje task: 4 rader, 1 kolumn
+    # Create a new figure for each task: 4 rows, 1 column
     fig, axes = plt.subplots(4, 1, figsize=(8, 16))
     
     # 1: Target distribution
@@ -59,11 +62,11 @@ for i, (task, file) in enumerate(zip(tasks, files)):
 
     plt.tight_layout()
     
-    # Spara som PDF i mappen 'plots'
+    # Save as PDF in the 'plots' folder
     save_path = f'plots/diagnostics_task_{task}.pdf'
     plt.savefig(save_path)
-    plt.close() # Stänger figuren för att frigöra minne inför nästa loop
+    plt.close() # Close figure to free memory for the next loop
     
-    print(f"Sparade diagnostik för Task {task} i {save_path}")
+    print(f"Saved diagnostics for Task {task} to {save_path}")
 
-print("Alla figurer är genererade!")
+print("All diagnostic figures generated successfully!")

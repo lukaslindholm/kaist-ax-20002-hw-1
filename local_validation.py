@@ -41,7 +41,7 @@ for TASK in TASKS:
         X_df, y, test_size=0.2, random_state=42
     )
 
-    # 2. Strict Leak-Free Spatial Clustering (Task A)
+    # 2. Spatial Clustering (Task A)
     if TASK == 'A':
         kmeans = KMeans(n_clusters=50, random_state=42, n_init='auto')
         dist_tr = kmeans.fit_transform(X_train_df[['x07', 'x08']])

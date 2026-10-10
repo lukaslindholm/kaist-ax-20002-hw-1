@@ -59,7 +59,7 @@ else:
         for idx in range(n_sub, len(axes)):
             fig.delaxes(axes[idx])
             
-        # Lägg BARA till huvudrubrik för del 1
+        # ONLY add main title to part 1
         if i == 0:
             plt.suptitle(f'Task {task}: Baseline LGBM Residuals vs Features', fontsize=14, y=1.02)
             
